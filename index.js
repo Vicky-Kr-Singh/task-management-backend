@@ -22,15 +22,18 @@ const PORT = process.env.PORT || 8080;
 /* =======================
    MongoDB (SINGLE connection)
 ======================= */
-mongoose
-  .connect(process.env.MONGO_URI, {
-    family: 4,
-  })
+mongoose.connect(process.env.MONGO_URI, {
+  family: 4,                     // force IPv4
+  serverSelectionTimeoutMS: 5000, // fail fast instead of crashing later
+  socketTimeoutMS: 45000,
+  maxPoolSize: 5,
+})
   .then(() => console.log("MongoDB connected"))
   .catch((err) => {
     console.error("MongoDB connection failed:", err.message);
     process.exit(1);
   });
+
 
 const app = express();
 
@@ -51,20 +54,12 @@ app.use(express.urlencoded({ extended: true }));
 /* =======================
    Session store (reuse mongoose connection)
 ======================= */
-const sessionStore = MongoStore.create({
-  client: mongoose.connection.getClient(),
-  collectionName: "session",
-});
 
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-    resave: false,              // ✅ important
-    saveUninitialized: false,   // ✅ important
-    store: sessionStore,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
-    },
+    resave: false,
+    saveUninitialized: false,
   })
 );
 
