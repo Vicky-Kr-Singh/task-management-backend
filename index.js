@@ -7,11 +7,20 @@ const cors = require("cors");
 const authModel = require("./Models/Model");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB connected");
+  })
+  .catch(err => {
+    console.error("MongoDB connection failed:", err.message);
+    process.exit(1);
+  });
 const MongoStore = require("connect-mongo");
 const passport = require("passport");
 const TodoRoutes = require("./Routes/TodoRoutes");
 const NoteRoutes = require("./Routes/NoteRoutes");
 const TaskRoutes = require("./Routes/TaskRoutes");
+const mongoose = require("mongoose");
 
 const PORT = 8080;
 
@@ -26,10 +35,11 @@ app.use([
   express.urlencoded({ extended: true }),
 ]);
 
-const sessionStore = new MongoStore({
-  mongoUrl: process.env.MONGO_URI,
+const sessionStore = MongoStore.create({
+  client: mongoose.connection.getClient(),
   collectionName: "session",
 });
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
@@ -165,3 +175,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
