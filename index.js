@@ -23,7 +23,9 @@ const PORT = process.env.PORT || 8080;
    MongoDB (SINGLE connection)
 ======================= */
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, {
+    family: 4,
+  })
   .then(() => console.log("MongoDB connected"))
   .catch((err) => {
     console.error("MongoDB connection failed:", err.message);
