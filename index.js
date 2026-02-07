@@ -1,12 +1,22 @@
 require("./passport");
 require("dotenv").config();
 const express = require("express");
+const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const authModel = require("./Models/Model");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+
+const MongoStore = require("connect-mongo");
+const passport = require("passport");
+const TodoRoutes = require("./Routes/TodoRoutes");
+const NoteRoutes = require("./Routes/NoteRoutes");
+const TaskRoutes = require("./Routes/TaskRoutes");
+
+
+const PORT = process.env.PORT || 8080;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected");
@@ -15,14 +25,6 @@ mongoose.connect(process.env.MONGO_URI)
     console.error("MongoDB connection failed:", err.message);
     process.exit(1);
   });
-const MongoStore = require("connect-mongo");
-const passport = require("passport");
-const TodoRoutes = require("./Routes/TodoRoutes");
-const NoteRoutes = require("./Routes/NoteRoutes");
-const TaskRoutes = require("./Routes/TaskRoutes");
-const mongoose = require("mongoose");
-
-const PORT = 8080;
 
 const app = express();
 app.use([
