@@ -1,42 +1,53 @@
-require("./passport");
 require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const authModel = require("./Models/Model");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
-
 const MongoStore = require("connect-mongo");
 const passport = require("passport");
+
+// Models & routes
+const authModel = require("./Models/Model");
 const TodoRoutes = require("./Routes/TodoRoutes");
 const NoteRoutes = require("./Routes/NoteRoutes");
 const TaskRoutes = require("./Routes/TaskRoutes");
 
-
 const PORT = process.env.PORT || 8080;
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB connected");
-  })
-  .catch(err => {
+
+/* =======================
+   MongoDB (SINGLE connection)
+======================= */
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => {
     console.error("MongoDB connection failed:", err.message);
     process.exit(1);
   });
 
 const app = express();
-app.use([
+
+/* =======================
+   Middleware
+======================= */
+app.use(
   cors({
     origin: process.env.FRONTEND_DOMAIN,
     credentials: true,
-    methods: ["GET", "PUT", "PATCH", "PUT", "DELETE"],
-  }),
-  express.json(),
-  express.urlencoded({ extended: true }),
-]);
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  })
+);
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+/* =======================
+   Session store (reuse mongoose connection)
+======================= */
 const sessionStore = MongoStore.create({
   client: mongoose.connection.getClient(),
   collectionName: "session",
@@ -45,46 +56,53 @@ const sessionStore = MongoStore.create({
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-    resave: true,
-    saveUninitialized: true,
+    resave: false,              // ✅ important
+    saveUninitialized: false,   // ✅ important
     store: sessionStore,
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24,
+      maxAge: 1000 * 60 * 60 * 24, // 1 day
     },
   })
 );
 
+/* =======================
+   Passport (AFTER session)
+======================= */
+require("./passport");
+
 app.use(passport.initialize());
 app.use(passport.session());
 
+/* =======================
+   Routes
+======================= */
 app.get("/", (req, res) => {
-  res.json(" hello ");
+  res.json("hello");
 });
 
 app.post("/register", async (req, res) => {
-  const { userName, email, password } = req.body;
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-  const newAuth = new authModel({
-    userName: userName,
-    email: email,
-    password: hashedPassword,
-  });
-
   try {
-    const user = await authModel.findOne({ email: email });
-    if (user) res.json("Already Registerd");
-    else {
-      const savedUser = await newAuth.save();
-      res.send(savedUser);
-    }
+    const { userName, email, password } = req.body;
+
+    const existingUser = await authModel.findOne({ email });
+    if (existingUser) return res.json("Already Registered");
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new authModel({
+      userName,
+      email,
+      password: hashedPassword,
+    });
+
+    const savedUser = await newUser.save();
+    res.json(savedUser);
   } catch (err) {
-    res.status(400).send(err);
+    res.status(400).json(err.message);
   }
 });
 
-
-//Local Login
+// Local login
 app.post(
   "/login",
   passport.authenticate("local", {
@@ -95,86 +113,83 @@ app.post(
   }
 );
 
-//logout
-app.get("/logout", (req, res, next) => {
-  req.logOut((err) => {
-    if (err) res.send(err);
-    else res.json({ success: "logged out" });
+// Logout
+app.get("/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json(err);
+    res.json({ success: "logged out" });
   });
 });
 
-app.get("/getUser", (req, res, next) => {
-  if (req.user) {
-    res.json(req.user);
-  }
+app.get("/getUser", (req, res) => {
+  if (req.user) return res.json(req.user);
+  res.status(401).json({ error: "Login Required" });
 });
 
-//Forgot and reset password
+/* =======================
+   Forgot / Reset Password
+======================= */
 app.post("/resetPassword/:id/:token", async (req, res) => {
   const { id, token } = req.params;
-  console.log(id);
   const { newPassword } = req.body;
-  jwt.verify(token, process.env.JWT_SECRET_KEY, async (err, encode) => {
-    if (err) return res.send({ Status: "Try again after few minutes" });
-    else {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(newPassword, salt);
-      authModel
-        .findByIdAndUpdate({ _id: id }, { password: hashedPassword })
-        .then((u) => res.send({ Status: "success" }))
-        .catch((err) => res.send({ Status: err }));
-    }
+
+  jwt.verify(token, process.env.JWT_SECRET_KEY, async (err) => {
+    if (err) return res.send({ Status: "Try again later" });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await authModel.findByIdAndUpdate(id, { password: hashedPassword });
+    res.send({ Status: "success" });
   });
 });
 
 app.post("/forgotpass", async (req, res) => {
   const { email } = req.body;
-  await authModel.findOne({ email: email }).then((user) => {
-    if (!user) return res.send({ Status: "Enter a valid email" });
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "1d",
-    });
-    var transporter = nodemailer.createTransport({
-      service: "gmail",
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: "jhonmoorthi85131@gmail.com",
-        pass: "klxb xvje ygnr qvbo",
-      },
-    });
+  const user = await authModel.findOne({ email });
+  if (!user) return res.send({ Status: "Enter a valid email" });
 
-    var mailOptions = {
-      from: "jhonmoorthi85131@gmail.com",
-      to: email,
-      subject: "Forgot password for task manager",
-      text: `${process.env.FRONTEND_DOMAIN}/ResetPass/${user._id}/${token}`,
-    };
+  const token = jwt.sign(
+    { id: user._id },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: "1d" }
+  );
 
-    transporter.sendMail(mailOptions, function (error, info) {
-      if (error) {
-        console.log(error);
-      } else {
-        return res.send({ Status: "success" });
-      }
-    });
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER, // ❗ move to .env
+      pass: process.env.EMAIL_PASS, // ❗ move to .env
+    },
   });
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: "Forgot password for task manager",
+    text: `${process.env.FRONTEND_DOMAIN}/ResetPass/${user._id}/${token}`,
+  });
+
+  res.send({ Status: "success" });
 });
 
+/* =======================
+   Protected routes
+======================= */
 const authenticator = (req, res, next) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: "Login Required" });
   }
   next();
 };
-app.use("/todo", [authenticator, TodoRoutes]);
-app.use("/note", [authenticator, NoteRoutes]);
-app.use("/task", [authenticator, TaskRoutes]);
 
+app.use("/todo", authenticator, TodoRoutes);
+app.use("/note", authenticator, NoteRoutes);
+app.use("/task", authenticator, TaskRoutes);
+
+/* =======================
+   Server
+======================= */
 app.listen(PORT, () => {
-  console.log(`Server Running On Port : ${PORT} `);
+  console.log(`Server Running On Port : ${PORT}`);
 });
 
 module.exports = app;
-
