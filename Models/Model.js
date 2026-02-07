@@ -1,14 +1,4 @@
 const mongoose = require("mongoose");
-require("dotenv").config();
-
-const authDatabase = mongoose.createConnection(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-authDatabase.on("connected", () => {
-  console.log("MongoDB connected (Auth Model)");
-});
 
 const schema = new mongoose.Schema({
   userName: {
@@ -37,5 +27,4 @@ const schema = new mongoose.Schema({
   },
 });
 
-module.exports = authDatabase.model("Authentication", schema);
-
+module.exports = mongoose.model("Authentication", schema);
