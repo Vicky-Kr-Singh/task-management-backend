@@ -5,7 +5,7 @@ const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const authModel = require("./Models/Model");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const passport = require("passport");
@@ -165,4 +165,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-

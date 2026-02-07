@@ -2,7 +2,7 @@ const passport = require("passport");
 require("dotenv").config();
 const LocalStrategy = require("passport-local").Strategy;
 const authModel = require("./Models/Model");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 
 
